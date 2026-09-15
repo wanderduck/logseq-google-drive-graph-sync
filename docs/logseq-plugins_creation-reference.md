@@ -148,6 +148,7 @@ logseq.App.registerCommandPalette({ key, label, keybinding? }, handler) / regist
 - **Updating an item in place:** re-call `provideUI` with the same `key` + `reset: true`. Don't re-register the toolbar item.
 - **The main UI is a full-window overlay.** The plugin must implement click-outside **and** Escape-to-close itself; the template does click-outside only.
 - **React bridge (template):** `useSyncExternalStore(subscribe('ui:visible:changed'), () => visible)`.
+- **Emit order (verified in `lsplugin.user.js` 0.0.17):** `showMainUI`/`hideMainUI` do `caller.call('main-ui:visible', p)`, then `emit('ui:visible:changed', p)`, and only **then** `_ui.set(...)`, which is what `isMainUIVisible` reads. So a `getSnapshot` that reads `logseq.isMainUIVisible` sees the stale value at notification time and React does not re-render. Take `visible` from the event payload `{ key, visible, autoFocus }` (`src/ui/useMainUiVisible.ts`).
 
 ### 5.3 Events [verified]
 - `LSPluginUserEvents`: only `'ui:visible:changed' | 'settings:changed'`.

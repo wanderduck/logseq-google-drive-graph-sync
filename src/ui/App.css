@@ -1,0 +1,110 @@
+:root {
+  --gdsync-bg: #ffffff;
+  --gdsync-fg: #1f2937;
+  --gdsync-muted: #6b7280;
+  --gdsync-border: #e5e7eb;
+  --gdsync-code-bg: #f3f4f6;
+  --gdsync-accent: #2563eb;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gdsync-bg: #1f2937;
+    --gdsync-fg: #f3f4f6;
+    --gdsync-muted: #9ca3af;
+    --gdsync-border: #374151;
+    --gdsync-code-bg: #111827;
+    --gdsync-accent: #60a5fa;
+    color-scheme: dark;
+  }
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: var(--gdsync-fg);
+}
+
+.gdsync-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.gdsync-panel {
+  width: min(440px, calc(100vw - 32px));
+  padding: 16px 20px 20px;
+  border: 1px solid var(--gdsync-border);
+  border-radius: 10px;
+  background: var(--gdsync-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.gdsync-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.gdsync-panel__header h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.gdsync-panel__close {
+  border: 0;
+  background: transparent;
+  color: var(--gdsync-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gdsync-panel__close:hover,
+.gdsync-panel__close:focus-visible {
+  color: var(--gdsync-accent);
+}
+
+.gdsync-panel p {
+  margin: 8px 0;
+}
+
+.gdsync-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 12px 0;
+}
+
+.gdsync-facts dt {
+  color: var(--gdsync-muted);
+}
+
+.gdsync-facts dd {
+  margin: 0;
+}
+
+.gdsync-facts code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--gdsync-code-bg);
+  font-size: 12.5px;
+}
+
+.gdsync-hint {
+  color: var(--gdsync-muted);
+  font-size: 12px;
+}

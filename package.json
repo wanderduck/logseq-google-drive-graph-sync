@@ -1,0 +1,44 @@
+{
+  "name": "logseq-google-drive-graph-sync",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Manual two-way sync of a file-based Logseq graph with Google Drive, with zip snapshots and restore.",
+  "author": "Wanderduck",
+  "license": "MIT",
+  "main": "dist/index.html",
+  "effect": true,
+  "logseq": {
+    "id": "logseq-google-drive-graph-sync",
+    "title": "Google Drive Graph Sync",
+    "description": "Manual two-way sync of a file-based Logseq graph with Google Drive, with zip snapshots and restore.",
+    "author": "Wanderduck",
+    "icon": "./icon.svg"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:watch": "vite build --watch",
+    "lint": "oxlint",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:one": "vitest run --reporter=verbose",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@logseq/libs": "0.0.17",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.83.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  }
+}
