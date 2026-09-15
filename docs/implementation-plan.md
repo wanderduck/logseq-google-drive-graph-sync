@@ -75,7 +75,7 @@ spikes/               M0 only; deleted at end of M0
 
 ### 3.5 Local state (FileStorage, JSON strings)
 - `device.json`: `{ deviceId (uuid), createdAt }`. The device *name* comes from settings.
-- `state/<graph-key>.json`: `{ version, driveRootId, graphFolderId, changesPageToken, lastSyncAt, lastSnapshotAt, lastProfileHash, entries: { [relPath]: { sha256, size, mtime, driveId, driveModifiedTime, syncedAt } } }`.
+- `state/<graph-key>.json`: `{ version, driveRootId, graphFolderId, changesPageToken, lastSyncAt, lastSnapshotAt, lastProfileHash, entries: { [relPath]: { sha256, size, mtimeMs, driveId, driveModifiedTime, syncedAt } }, remote: { [relPath]: { path, id, sha256, size, modifiedTime, createdTime, md5 } } }`. **Amendment approved 2026-09-15 (M6):** `remote` is the persisted remote view, Drive's state under the graph folder as of `changesPageToken`; it may be ahead of `entries` for paths whose remote change was not applied locally yet (a skipped conflict, a failed download), which lets the token advance on every run.
 - `journal/<graph-key>.json`: pending executor operations, so an interrupted sync resumes idempotently.
 
 ### 3.6 Sync flow (button press)
@@ -93,7 +93,7 @@ spikes/               M0 only; deleted at end of M0
    - Renames are treated as delete + add (v1).
 6. **Conflict dialog (D7):** keep local / keep remote / keep both (`name.conflict-<deviceName>-<YYYYMMDD-HHmm>.ext`) / apply to all. Unresolved conflicts are skipped and reported.
 7. **Execute** with a concurrency limit, journaled per operation:
-   - Downloads use atomic writes (`<path>.gdsync-tmp` → rename). **Before overwriting an existing local file, its previous content is copied to `logseq/bak/gdsync/<ts>/`** (amendment approved 2026-09-15; Logseq's own `bak/` only fires on deletions, see `docs/spike-results.md` §4.3).
+   - Downloads use atomic writes (`<path>.gdsync-tmp` → rename). **Before overwriting an existing local file, its previous content is copied to `logseq/bak/gdsync/<ts>/`** (amendment approved 2026-09-15; Logseq's own `bak/` only fires on deletions, see `docs/spike-results.md` §4.3). **Amendment approved 2026-09-15 (M6):** a "keep local" answer on a both-modified conflict first downloads the remote version it is about to overwrite into the same `logseq/bak/gdsync/<ts>/<path>`, because that version may exist nowhere else.
    - Local deletions are moved to `logseq/bak/gdsync/<ts>/`.
    - Remote deletions go to Drive trash.
    - Writes to the page currently open in the editor: **M0 finding — the host shows no prompt and an external write to the block being edited closes the editor and drops unsaved input.** The executor therefore force-saves with `logseq.Editor.exitEditingMode()` before the local scan and before any write, then waits for the flush (`docs/spike-results.md` §4.2).

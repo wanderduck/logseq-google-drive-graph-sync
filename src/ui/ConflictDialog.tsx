@@ -49,9 +49,7 @@ function SideCard({ title, side }: { title: string; side: ConflictSide | null })
           <dt>Modified</dt>
           <dd>{formatDateTime(side.modifiedAt)}</dd>
           <dt>SHA-256</dt>
-          <dd>
-            <code title={side.sha256}>{side.sha256.slice(0, 12)}…</code>
-          </dd>
+          <dd>{side.sha256 ? <code title={side.sha256}>{side.sha256.slice(0, 12)}…</code> : <span className="gdsync-muted">unknown</span>}</dd>
         </dl>
       ) : (
         <div className="gdsync-muted">deleted</div>

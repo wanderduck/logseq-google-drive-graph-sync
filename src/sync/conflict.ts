@@ -12,7 +12,8 @@ export interface ConflictSide {
   size: number
   /** Epoch ms. */
   modifiedAt: number
-  sha256: string
+  /** `null` for a remote file that carries no `sha256` appProperty (not uploaded by this plugin). */
+  sha256: string | null
 }
 
 export interface ConflictItem {
