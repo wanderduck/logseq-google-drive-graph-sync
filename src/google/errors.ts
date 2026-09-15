@@ -128,6 +128,8 @@ export function describeGoogleError(err: unknown): string {
       return 'The Google Drive API is not enabled in the Google Cloud project that owns this OAuth client. Enable it, wait a minute, and try again.'
     }
     if (err.status === 401) return 'Google rejected the access token (HTTP 401). Sign out and connect again.'
+    if (err.status === 404) return 'Google Drive no longer has that file or folder (HTTP 404). Sync again to rebuild the remote state.'
+    if (err.info.reasons.includes('storageQuotaExceeded')) return 'Google Drive is out of storage space (storageQuotaExceeded).'
     const detail = err.info.message ? `: ${err.info.message}` : err.info.reasons.length > 0 ? ` (${err.info.reasons.join(', ')})` : ''
     if (err.status === 403) return `Google refused the request (HTTP 403)${detail}.`
     return `Google returned HTTP ${err.status}${detail}.`

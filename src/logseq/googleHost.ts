@@ -3,6 +3,7 @@
 
 import { createGoogleAuth, type GoogleAuth } from '../google/auth'
 import { resolveClientCredentials, type BuiltInCredentials } from '../google/credentials'
+import { createDriveClient, type DriveClient, type DriveClientDeps } from '../google/drive'
 import { createHttpClient } from '../google/http'
 import { createTokenStore } from '../google/tokenStore'
 import type { Store } from '../sync/store'
@@ -48,5 +49,14 @@ export function createHostGoogleAuth(settings: Store<GdsyncSettings>): GoogleAut
     getCredentials: () => resolveClientCredentials(builtIn, settings.get()),
     sleep: hostSleep,
     log: (line, detail) => log(`auth: ${line}`, detail),
+  })
+}
+
+/** The Drive client over the authorized fetch (M4). `overrides` exist for the smoke test's small upload thresholds. */
+export function createHostDriveClient(auth: GoogleAuth, overrides: Partial<Omit<DriveClientDeps, 'fetch'>> = {}): DriveClient {
+  return createDriveClient({
+    fetch: auth.fetch,
+    log: (line) => console.info(`[gdsync] drive: ${line}`),
+    ...overrides,
   })
 }

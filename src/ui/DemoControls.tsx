@@ -14,7 +14,7 @@ export function DemoControls({ controller, busy }: DemoControlsProps) {
   return (
     <details className="gdsync-demo">
       <summary>Demo controls (M2 mock data)</summary>
-      <p className="gdsync-muted gdsync-small">Nothing here touches Google Drive or the graph. The real engine replaces it in M7.</p>
+      <p className="gdsync-muted gdsync-small">The mock runs below touch neither Google Drive nor the graph. The real engine replaces them in M7.</p>
       <div className="gdsync-demo__row">
         <span>Run a mock sync:</span>
         <button type="button" className="gdsync-btn gdsync-btn--small" disabled={busy} onClick={() => void controller.runDemo('clean')}>
@@ -35,6 +35,16 @@ export function DemoControls({ controller, busy }: DemoControlsProps) {
           </button>
         ))}
       </div>
+      <div className="gdsync-demo__row">
+        <span>M4 Drive layer:</span>
+        <button type="button" className="gdsync-btn gdsync-btn--small" disabled={busy} onClick={() => void controller.runDriveSmoke()}>
+          Run Drive smoke test
+        </button>
+      </div>
+      <p className="gdsync-muted gdsync-small">
+        Talks to the real Google Drive: creates a throwaway “&lt;root folder&gt; smoke-…” folder, exercises uploads, downloads, changes and the lock, then
+        deletes it again. Needs a connected account and a graph under ~/logseq-test-graphs/. Progress is logged as [gdsync] smoke in the console.
+      </p>
     </details>
   )
 }
