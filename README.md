@@ -11,3 +11,7 @@ Logseq desktop plugin (file-based graphs, Logseq 0.10.x) that syncs a graph with
 
 ## Status
 Under development (milestone M1 of M9: project scaffold). Not usable for syncing yet.
+
+
+## Progress
+See [docs/progress.md](docs/progress.md) for a detailed progress report.
