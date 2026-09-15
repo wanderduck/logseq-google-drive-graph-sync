@@ -1,9 +1,19 @@
 import { useEffect } from 'react'
+import type { GdsyncSettings } from '../logseq/settings'
+import type { MockSyncController } from '../mock/mockSyncController'
+import type { SyncStatus } from '../sync/status'
+import type { Store } from '../sync/store'
+import { ConflictDialog } from './ConflictDialog'
+import { StatusPanel } from './StatusPanel'
 import { useMainUiVisible } from './useMainUiVisible'
+import { useStore } from './useStore'
 
 export interface AppProps {
   pluginId: string
   hostVersion: string
+  status: Store<SyncStatus>
+  settings: Store<GdsyncSettings>
+  controller: MockSyncController
 }
 
 function closePanel(): void {
@@ -11,48 +21,50 @@ function closePanel(): void {
 }
 
 // The main UI is a full-window overlay (Ref §5.2); Escape and click-outside closing are the plugin's job.
-export function App({ pluginId, hostVersion }: AppProps) {
+// While conflicts wait for a decision the overlay shows the dialog instead of the panel, and the backdrop
+// does not close it (the dialog handles Escape itself: it skips the remaining conflicts).
+export function App({ pluginId, hostVersion, status, settings, controller }: AppProps) {
   const visible = useMainUiVisible()
+  const s = useStore(status)
+  const cfg = useStore(settings)
+  const dialogOpen = s.pendingConflicts.length > 0
 
   useEffect(() => {
-    if (!visible) return
+    if (!visible || dialogOpen) return
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') closePanel()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [visible])
+  }, [visible, dialogOpen])
+
+  // D9: the only automatic remote call is a status check when the panel opens.
+  useEffect(() => {
+    if (!visible) return
+    const current = status.get()
+    if (current.account && !current.running) void controller.checkRemote()
+  }, [visible, status, controller])
 
   if (!visible) return null
 
   return (
-    <div className="gdsync-backdrop" onMouseDown={closePanel}>
-      <section
-        className="gdsync-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="gdsync-title"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <header className="gdsync-panel__header">
-          <h1 id="gdsync-title">Google Drive Graph Sync</h1>
-          <button type="button" className="gdsync-panel__close" onClick={closePanel} aria-label="Close">
-            ×
-          </button>
-        </header>
-        <p>Scaffold loaded (milestone M1). Sync is not implemented yet.</p>
-        <dl className="gdsync-facts">
-          <dt>Plugin id</dt>
-          <dd>
-            <code>{pluginId}</code>
-          </dd>
-          <dt>Logseq</dt>
-          <dd>
-            <code>{hostVersion}</code>
-          </dd>
-        </dl>
-        <p className="gdsync-hint">Press Escape or click outside to close.</p>
-      </section>
+    <div className="gdsync-backdrop" onMouseDown={dialogOpen ? undefined : closePanel}>
+      {dialogOpen ? (
+        <ConflictDialog
+          conflicts={s.pendingConflicts}
+          deviceName={cfg.deviceName}
+          onDone={(resolutions) => controller.resolveConflicts(resolutions)}
+        />
+      ) : (
+        <StatusPanel
+          pluginId={pluginId}
+          hostVersion={hostVersion}
+          status={s}
+          settings={cfg}
+          controller={controller}
+          onClose={closePanel}
+        />
+      )}
     </div>
   )
 }

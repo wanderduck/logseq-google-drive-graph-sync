@@ -141,11 +141,17 @@ logseq.setMainUIInlineStyle({ position, zIndex, top, left, … }) / setMainUIAtt
 logseq.on('ui:visible:changed', ({ visible }) => {})
 logseq.UI.showMsg(content, 'info'|'success'|'warning'|'error', { key?, timeout? })  // timeout: 0 = sticky; returns key; hiccup strings allowed
 logseq.UI.closeMsg(key)                                    // (older samples use logseq.App.showMsg)
+// Verified @0.10.15 (`logseq/sdk/ui.cljs -show_msg`, `handler/notification.cljs show!`): `clear? = (timeout ≠ 0)`;
+// a call with an existing `key` replaces that toast's content in place (map assoc by uid); every call with a
+// non-zero timeout schedules its own auto-clear, so update sticky toasts and close them explicitly.
+// `UI.*` calls are dispatched as `ui_<method>` → `logseq.sdk.ui/<snake_case>` (e.g. `close_msg`).
 logseq.Editor.registerSlashCommand(label, handler)
 logseq.Editor.registerBlockContextMenuItem(label, ({ blockId }) => {})
 logseq.App.registerCommandPalette({ key, label, keybinding? }, handler) / registerCommandShortcut(...)
 ```
-- **Updating an item in place:** re-call `provideUI` with the same `key` + `reset: true`. Don't re-register the toolbar item.
+- **Updating an item in place:** re-call `provideUI` with the same `key` + `reset: true`. A `registerUIItem` toolbar/pagebar item **can also be re-registered with the same `key`**: `frontend/handler/plugin.cljs register-plugin-ui-item` @0.10.15 filters out the existing entry with that key before adding the new one, and `components/plugins.cljs ui-item-renderer` re-runs `setupInjectedUI` when `template` changes. (Corrected 2026-09-15; the earlier "don't re-register" note was unverified.)
+- **Toolbar item DOM (verified `components/plugins.cljs` @0.10.15):** each item is wrapped in `div#injected-ui-item-<key>-<pid>.injected-ui-item-toolbar`, which is the `slot` handed to `setupInjectedUI`. Items are listed inline only while the user has **no** pinned-items set (`:plugin/preferences :pinnedToolbarItems`); once any item is pinned, unpinned items move into the toolbar "plugins" dropdown, rendered again with `prefix "pl-"` and key `pl-<key>`. Scope injected CSS by your own class names, not by these ids/attributes.
+- **`provideStyle({ key, style })` does not replace:** `register-plugin-resources` only stores a keyed resource when that key is absent (`#{:error nil}`), so a keyed style is write-once per plugin load. Put state into the DOM (`data-*` attributes) and keep the CSS static.
 - **The main UI is a full-window overlay.** The plugin must implement click-outside **and** Escape-to-close itself; the template does click-outside only.
 - **React bridge (template):** `useSyncExternalStore(subscribe('ui:visible:changed'), () => visible)`.
 - **Emit order (verified in `lsplugin.user.js` 0.0.17):** `showMainUI`/`hideMainUI` do `caller.call('main-ui:visible', p)`, then `emit('ui:visible:changed', p)`, and only **then** `_ui.set(...)`, which is what `isMainUIVisible` reads. So a `getSnapshot` that reads `logseq.isMainUIVisible` sees the stale value at notification time and React does not re-render. Take `visible` from the event payload `{ key, visible, autoFocus }` (`src/ui/useMainUiVisible.ts`).

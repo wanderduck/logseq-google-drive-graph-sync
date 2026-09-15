@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq graph with Google Drive. It also creates zip snapshots and restores onto a new device. The plan is approved; implementation follows milestones M0–M9. **M0 is done (2026-09-15): architecture B is confirmed. M1 scaffold is done (2026-09-15): the plugin loads in Logseq 0.10.15; lint, test, and build are green. Next: M2.**
+Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq graph with Google Drive. It also creates zip snapshots and restores onto a new device. The plan is approved; implementation follows milestones M0–M9. **M0 is done (2026-09-15): architecture B is confirmed. M1 scaffold is done (2026-09-15). M2 UI shell is done (2026-09-15): settings schema, 5-state toolbar button, palette commands, status panel, conflict dialog, sticky toasts, all driven by the mock in `src/mock/`; lint, 44 tests, build green; the in-Logseq demo check passed. Next: M3 Google auth.**
 
 - **Start every session by reading `docs/progress.md`**: current milestone, handoff notes, next action.
 - `docs/implementation-plan.md` is the approved plan. It holds decisions D1–D11 and C1–C2, the architecture, the sync algorithm, and each milestone's steps and DoD. Don't re-litigate approved decisions. Deviations need user sign-off and a log entry in `docs/progress.md`.
@@ -43,6 +43,8 @@ Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq 
   - `src/fs/` has the `GraphFs` interface with the `HostBridgeFs` or `HelperFs` implementation.
   - `src/google/` has device-code OAuth, the HTTP transport, and the Drive client.
   - `src/logseq/` and `src/ui/` hold host wiring and the React UI.
+  - `src/mock/` (+ `src/ui/DemoControls.tsx`) is the **M2-only** fake engine behind the `SyncController` interface (`src/sync/controller.ts`). M7 replaces it with the real engine and deletes it.
+- UI state flows one way: engine → `Store<SyncStatus>` (`src/sync/store.ts`, `status.ts`) → toolbar (`registerToolbar` re-registers the item on state change), panel (`useStore`), toasts. `deriveSyncState()` is the single source of the five toolbar states.
 - All file I/O goes through `GraphFs` so the bridge can be swapped out if a Logseq update breaks it.
 
 ## Non-Obvious Gotchas (verified; details in the reference doc)
@@ -60,6 +62,9 @@ Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq 
 - The global `logseq` is typed as the `ILSPluginUser` interface, which lacks the `version` getter of the `LSPluginUser` class. `logseq.version` does not compile; the SDK version is the pinned 0.0.17 anyway.
 - `npm audit` reports dompurify (critical) and lodash-es (high) advisories, all transitive under the pinned `@logseq/libs` 0.0.17. They cannot be fixed without breaking the pin (D3); accepted, revisit at M9.
 - Settings schema `type: 'button'` does not exist on 0.10.15 (the item is silently not rendered).
+- A toolbar item **can** be updated by calling `registerUIItem` again with the same `key` (host `register-plugin-ui-item` replaces the entry; verified in 0.10.15 source). Its wrapper is `div#injected-ui-item-<key>-<pid>`, and it moves into the toolbar "plugins" dropdown (key prefixed `pl-`) once the user has pinned items, so scope injected CSS by your own class names, never by the container.
+- Toasts: `UI.showMsg(text, status, { key, timeout: 0 })` is sticky, a second call with the same `key` replaces the toast in place, and `UI.closeMsg(key)` removes it (verified in `logseq/sdk/ui.cljs` + `handler/notification.cljs`). Re-showing with a non-zero timeout schedules an extra auto-clear each time.
+- `provideStyle({ key, style })` registers a style only if that key is not already registered (`register-plugin-resources`), so a keyed style cannot be replaced; encode state in the DOM (`data-state`) instead.
 - Google OAuth: device-code flow with scope `drive.file` (non-sensitive). The GCP consent screen must be **"In production"**; in "Testing" status, refresh tokens expire after 7 days.
 
 ## Stack Convention
