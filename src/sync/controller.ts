@@ -10,7 +10,11 @@ export interface SyncController {
   backupNow(): Promise<void>
   /** The only automatic remote call: a status check when the panel opens (plan D9). */
   checkRemote(): Promise<void>
+  /** Starts the device-code sign-in (plan M3 step 2); progress is visible in `status.deviceFlow`. */
   connect(): Promise<void>
+  /** Aborts a sign-in that is waiting for approval; no-op otherwise. */
+  cancelConnect(): void
+  /** Revokes the Google grant (best effort) and forgets the local session. */
   signOut(): Promise<void>
   /** Answers the conflict dialog. Paths missing from `resolutions` are skipped (plan §3.6 step 6). */
   resolveConflicts(resolutions: ConflictResolution[]): void

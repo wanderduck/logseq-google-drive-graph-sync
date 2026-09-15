@@ -28,3 +28,12 @@ export async function openProgressToast(text: string): Promise<ProgressToast> {
 export function showToast(text: string, status: ToastStatus, timeoutMs = 5000): void {
   void logseq.UI.showMsg(text, status, { timeout: timeoutMs })
 }
+
+/** A sticky toast under a caller-chosen key; call again to replace it, `closeToast(key)` to remove it. */
+export function showStickyToast(key: string, text: string, status: ToastStatus = 'info'): void {
+  void logseq.UI.showMsg(text, status, { key, timeout: 0 })
+}
+
+export function closeToast(key: string): void {
+  logseq.UI.closeMsg(key)
+}

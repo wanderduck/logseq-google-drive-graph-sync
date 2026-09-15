@@ -340,6 +340,50 @@ body,
   line-height: 1.5;
 }
 
+/* Device-code sign-in */
+.gdsync-connect {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--gdsync-info-border);
+  border-radius: 8px;
+  background: var(--gdsync-info-bg);
+}
+
+.gdsync-connect__title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.gdsync-connect__steps {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.gdsync-connect__code {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--gdsync-code-bg);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  user-select: all;
+}
+
+.gdsync-connect__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gdsync-connect__actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* Conflict dialog */
 .gdsync-dialog {
   width: min(600px, calc(100vw - 32px));

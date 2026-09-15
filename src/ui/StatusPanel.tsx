@@ -1,6 +1,7 @@
 import type { GdsyncSettings } from '../logseq/settings'
 import type { MockSyncController } from '../mock/mockSyncController'
 import { deriveSyncState, type RemoteStatus, type SyncState, type SyncStatus } from '../sync/status'
+import { ConnectBox } from './ConnectBox'
 import { DemoControls } from './DemoControls'
 import { formatDateTime, formatRelativeTime, formatSummary } from './format'
 import { useNow } from './useNow'
@@ -82,6 +83,8 @@ export function StatusPanel({ pluginId, hostVersion, status, settings, controlle
               Sign out
             </button>
           </>
+        ) : status.deviceFlow ? (
+          <span>Connecting to Google Drive…</span>
         ) : (
           <>
             <span>Not connected to Google Drive.</span>
@@ -91,6 +94,8 @@ export function StatusPanel({ pluginId, hostVersion, status, settings, controlle
           </>
         )}
       </div>
+
+      {status.deviceFlow && <ConnectBox flow={status.deviceFlow} now={now} onCancel={() => controller.cancelConnect()} />}
 
       {status.running && (
         <div className="gdsync-banner gdsync-banner--info" role="status">

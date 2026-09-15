@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq graph with Google Drive. It also creates zip snapshots and restores onto a new device. The plan is approved; implementation follows milestones M0–M9. **M0 is done (2026-09-15): architecture B is confirmed. M1 scaffold is done (2026-09-15). M2 UI shell is done (2026-09-15): settings schema, 5-state toolbar button, palette commands, status panel, conflict dialog, sticky toasts, all driven by the mock in `src/mock/`; lint, 44 tests, build green; the in-Logseq demo check passed. Next: M3 Google auth.**
+Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq graph with Google Drive. It also creates zip snapshots and restores onto a new device. The plan is approved; implementation follows milestones M0–M9. **M0 is done (2026-09-15): architecture B is confirmed. M1 scaffold is done (2026-09-15). M2 UI shell is done (2026-09-15): settings schema, 5-state toolbar button, palette commands, status panel, conflict dialog, sticky toasts, all driven by the mock in `src/mock/`. M3 Google auth is done (2026-09-15): device-code sign-in, token store, refresh, revoke, backoff transport in `src/google/`; lint, 105 tests, build green; the in-Logseq live check passed, including connected state surviving a restart. Next: M4 Drive layer.**
 
 - **Start every session by reading `docs/progress.md`**: current milestone, handoff notes, next action.
 - `docs/implementation-plan.md` is the approved plan. It holds decisions D1–D11 and C1–C2, the architecture, the sync algorithm, and each milestone's steps and DoD. Don't re-litigate approved decisions. Deviations need user sign-off and a log entry in `docs/progress.md`.
@@ -41,10 +41,11 @@ Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq 
 - Layering is strict:
   - `src/sync/` is pure TypeScript with no `logseq`/Google imports, and is unit-tested with in-memory fakes.
   - `src/fs/` has the `GraphFs` interface with the `HostBridgeFs` or `HelperFs` implementation.
-  - `src/google/` has device-code OAuth, the HTTP transport, and the Drive client.
+  - `src/google/` has device-code OAuth, the HTTP transport, and the Drive client. It is **host-agnostic** (no `logseq` import): `fetch`, `sleep`, the key-value storage and the credentials resolver are injected by `src/logseq/googleHost.ts`, and tests script `fetch` (`tests/google/helpers.ts`). `GoogleAuth.fetch` is the authorized fetch (Bearer header, one refresh + retry on 401, backoff underneath) that M4's Drive client builds on. Request bodies must be re-sendable (string/URLSearchParams/Blob/ArrayBuffer), because the transport retries.
   - `src/logseq/` and `src/ui/` hold host wiring and the React UI.
-  - `src/mock/` (+ `src/ui/DemoControls.tsx`) is the **M2-only** fake engine behind the `SyncController` interface (`src/sync/controller.ts`). M7 replaces it with the real engine and deletes it.
-- UI state flows one way: engine → `Store<SyncStatus>` (`src/sync/store.ts`, `status.ts`) → toolbar (`registerToolbar` re-registers the item on state change), panel (`useStore`), toasts. `deriveSyncState()` is the single source of the five toolbar states.
+  - `src/mock/` (+ `src/ui/DemoControls.tsx`) is the **M2-only** fake engine behind the `SyncController` interface (`src/sync/controller.ts`). Since M3 its `connect`/`cancelConnect`/`signOut` delegate to the real `GoogleAuth` and it mirrors `auth.state` into `status.account`/`status.deviceFlow`; M7 replaces the fake sync flows with the real engine, keeps the auth wiring, and deletes `src/mock/`.
+- UI state flows one way: engine → `Store<SyncStatus>` (`src/sync/store.ts`, `status.ts`) → toolbar (`registerToolbar` re-registers the item on state change), panel (`useStore`), toasts. `deriveSyncState()` is the single source of the five toolbar states. Auth has its own `Store<AuthState>` (`signed-out` | `connecting` | `signed-in`) that the controller mirrors; toasts for auth events live in the controller, never in `src/google/`.
+- Google session: one JSON string in `logseq.FileStorage` at `auth/google-session.json` (plaintext). The e-mail comes from Drive `about.get` (`drive.file` carries no identity). `TokenStore.clear()` overwrites the file with `null` rather than deleting it.
 - All file I/O goes through `GraphFs` so the bridge can be swapped out if a Logseq update breaks it.
 
 ## Non-Obvious Gotchas (verified; details in the reference doc)
@@ -53,7 +54,8 @@ Logseq desktop plugin that does **manual, two-way sync** of a file-based Logseq 
 - Bridge (`doAction`) failures **resolve with a host-realm `Error` object** instead of rejecting; `Date`s in `stat` results are host-realm too. `instanceof` fails across realms, use `Object.prototype.toString.call(v)` / `getTime()`.
 - Bridge `readFile` returns UTF-8 text only; read bytes with `fetch('file://' + encodeURI(path))`. `unlink` moves graph files into `logseq/.recycle/`; use `rename` for our own `logseq/bak/gdsync/` moves. There is no directory delete.
 - An external write to the file of the block **being edited** closes the editor and silently drops unsaved input, with no host prompt. Force-save with `logseq.Editor.exitEditingMode()` before scanning or writing.
-- `logseq.FileStorage.removeItem`/`clear` are fire-and-forget in the SDK; only `setItem`/`getItem`/`hasItem`/`allKeys` are true round-trips.
+- `logseq.FileStorage.removeItem`/`clear` are fire-and-forget in the SDK; only `setItem`/`getItem`/`hasItem`/`allKeys` are true round-trips. **`getItem` of a missing key rejects** ("file not existed"); call `hasItem` first (Ref §6.6).
+- Google OAuth answers use two error dialects (`{error, error_description}` for OAuth, `{error:{code,message,errors[{reason}]}}` for Drive); `parseGoogleError` in `src/google/errors.ts` reads both and `describeGoogleError` is the only place that turns them into user-facing text. A 403 is retried only for the Drive rate-limit reasons, so the OAuth 403s `slow_down`/`access_denied` reach the poll loop.
 - `logseq.updateSettings()` does not update `logseq.settings` synchronously. Read fresh values in `onSettingsChanged` (Ref §5.1).
 - Settings (`~/.logseq/settings/<id>.json`) and `logseq.FileStorage` are plaintext on disk, and FileStorage values are strings only (Ref §5.1, §6.6).
 - `DB.datascriptQuery` errors can resolve with a `"#lspmsg#error#"` key instead of rejecting (Ref §6.2).

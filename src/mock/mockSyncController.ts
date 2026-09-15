@@ -1,15 +1,23 @@
 // M2-ONLY MOCK of the sync flow (plan §3.6) so every UI state is demoable without Google or file access.
 // It drives the same stores and toasts the real engine will drive, behind the same `SyncController`
-// interface. M7 replaces it and deletes `src/mock/`. Nothing in here touches the graph or the network.
+// interface. M7 replaces it and deletes `src/mock/`. Nothing in here touches the graph.
+//
+// Since M3 the account side is REAL: `connect` / `cancelConnect` / `signOut` delegate to `GoogleAuth`
+// (src/google/auth.ts) and `auth.state` is mirrored into `status.account` / `status.deviceFlow`. Only the
+// sync, backup and remote-check flows are still fake. M7 keeps the auth wiring below and drops the rest.
 
+import type { AuthState, GoogleAuth } from '../google/auth'
+import { describeGoogleError } from '../google/errors'
 import { openPanel } from '../logseq/commands'
 import type { GdsyncSettings } from '../logseq/settings'
-import { openProgressToast, showToast } from '../logseq/toasts'
+import { closeToast, openProgressToast, showStickyToast, showToast } from '../logseq/toasts'
 import { conflictCopyName, type ConflictItem, type ConflictResolution } from '../sync/conflict'
 import type { SyncController } from '../sync/controller'
 import type { SyncProgress, SyncState, SyncStatus, SyncStep, SyncSummary } from '../sync/status'
 import type { Store } from '../sync/store'
 import { formatSummary } from '../ui/format'
+
+const CONNECT_TOAST_KEY = 'gdsync-connect'
 
 export type DemoScenario = 'clean' | 'conflicts' | 'error'
 
@@ -23,6 +31,7 @@ export interface MockSyncController extends SyncController {
 export interface MockDeps {
   status: Store<SyncStatus>
   settings: Store<GdsyncSettings>
+  auth: GoogleAuth
 }
 
 const HOUR = 3_600_000
@@ -120,12 +129,39 @@ function countOps(ops: MockOp[], kind: OpKind): number {
   return ops.filter((o) => o.kind === kind).length
 }
 
-export function createMockSyncController({ status, settings }: MockDeps): MockSyncController {
+export function createMockSyncController({ status, settings, auth }: MockDeps): MockSyncController {
   let disposed = false
   let pendingResolve: ((r: ConflictResolution[]) => void) | null = null
 
   const patch = (p: Partial<SyncStatus>): void => status.update((s) => ({ ...s, ...p }))
   const progress = (p: SyncProgress): void => patch({ running: p })
+
+  /** One-way mirror auth → status. Losing the account also drops remote state and pending conflicts. */
+  function mirrorAuth(a: AuthState): void {
+    const account = a.kind === 'signed-in' ? a.account : null
+    const deviceFlow = a.kind === 'connecting' ? { userCode: a.userCode, verificationUrl: a.verificationUrl, expiresAt: a.expiresAt } : null
+    status.update((s) => {
+      const lostAccount = s.account !== null && account === null
+      return {
+        ...s,
+        account,
+        deviceFlow,
+        ...(lostAccount ? { remote: { kind: 'unchecked' as const }, pendingConflicts: [], running: null } : {}),
+      }
+    })
+    if (deviceFlow) {
+      showStickyToast(
+        CONNECT_TOAST_KEY,
+        `Google sign-in: enter code ${deviceFlow.userCode} at ${deviceFlow.verificationUrl}. The sync panel has the details.`,
+      )
+    } else {
+      closeToast(CONNECT_TOAST_KEY)
+    }
+    if (a.kind === 'signed-out' && a.reason === 'session-expired') {
+      showToast('The Google sign-in expired or was revoked. Connect again from the sync panel.', 'warning', 10_000)
+    }
+  }
+  const unsubscribeAuth = auth.state.subscribe(mirrorAuth)
 
   /** Resolves after `ms`, or rejects once the plugin is unloading so a run cannot outlive it. */
   const tick = (ms: number): Promise<void> =>
@@ -283,9 +319,39 @@ export function createMockSyncController({ status, settings }: MockDeps): MockSy
   }
 
   async function connect(): Promise<void> {
-    patch({ account: MOCK_ACCOUNT })
-    showToast('Connected to Google Drive (mock account; the real sign-in arrives in M3).', 'success')
-    await checkRemote()
+    patch({ lastError: null })
+    try {
+      const r = await auth.connect()
+      switch (r.kind) {
+        case 'connected':
+          showToast(`Connected to Google Drive as ${r.account.email}.`, 'success')
+          if (r.warning) showToast(r.warning, 'warning', 12_000)
+          await checkRemote()
+          break
+        case 'denied':
+          showToast('Google sign-in was declined. Nothing was connected.', 'warning')
+          break
+        case 'expired':
+          showToast('The sign-in code expired before it was approved. Connect again to get a new code.', 'warning')
+          break
+        case 'cancelled':
+          showToast('Sign-in cancelled.', 'info', 3000)
+          break
+        case 'already-connected':
+          // A demo "signed-out" state was forced while the real session is alive: resync the mirror.
+          mirrorAuth(auth.state.get())
+          break
+        case 'already-connecting':
+          openPanel()
+          break
+      }
+    } catch (err) {
+      if (disposed) return
+      console.error('[gdsync] connect failed', err)
+      const message = describeGoogleError(err)
+      patch({ lastError: { message: `Google sign-in failed. ${message}`, at: Date.now() } })
+      showToast(`Google sign-in failed: ${message}`, 'error', 10_000)
+    }
   }
 
   async function signOut(): Promise<void> {
@@ -293,7 +359,17 @@ export function createMockSyncController({ status, settings }: MockDeps): MockSy
       showToast('Wait for the current sync or backup to finish before signing out.', 'warning')
       return
     }
-    patch({ account: null, remote: { kind: 'unchecked' }, pendingConflicts: [] })
+    const r = await auth.signOut()
+    if (r.revoked) {
+      showToast('Signed out of Google Drive; the plugin’s access was revoked.', 'success')
+    } else if (r.revokeError) {
+      showToast(
+        `Signed out locally, but Google could not be told to revoke access (${r.revokeError}). ` +
+          'You can remove "Google Drive Graph Sync" at https://myaccount.google.com/permissions.',
+        'warning',
+        12_000,
+      )
+    }
   }
 
   function resolveConflicts(resolutions: ConflictResolution[]): void {
@@ -313,11 +389,11 @@ export function createMockSyncController({ status, settings }: MockDeps): MockSy
         patch({ ...base, account: null, remote: { kind: 'unchecked' } })
         break
       case 'idle':
-        patch({ ...base, account: MOCK_ACCOUNT, lastSync: s.lastSync ? { ...s.lastSync, conflictsSkipped: 0 } : null })
+        patch({ ...base, account: s.account ?? MOCK_ACCOUNT, lastSync: s.lastSync ? { ...s.lastSync, conflictsSkipped: 0 } : null })
         break
       case 'syncing': {
         const running: SyncProgress = { step: 'execute', label: 'Uploading pages/Alpha.md', done: 3, total: 7 }
-        patch({ ...base, account: MOCK_ACCOUNT, running })
+        patch({ ...base, account: s.account ?? MOCK_ACCOUNT, running })
         void tick(4000)
           .then(() => {
             if (status.get().running === running) patch({ running: null })
@@ -328,7 +404,7 @@ export function createMockSyncController({ status, settings }: MockDeps): MockSy
       case 'conflict':
         patch({
           ...base,
-          account: MOCK_ACCOUNT,
+          account: s.account ?? MOCK_ACCOUNT,
           running: { step: 'conflicts', label: '3 conflicts need your decision', done: 0, total: 3 },
           pendingConflicts: mockConflicts(Date.now()),
         })
@@ -336,7 +412,7 @@ export function createMockSyncController({ status, settings }: MockDeps): MockSy
       case 'error':
         patch({
           ...base,
-          account: MOCK_ACCOUNT,
+          account: s.account ?? MOCK_ACCOUNT,
           lastError: {
             message: 'Another device ("Office-PC") holds the Drive lock for 12 more minutes. Retry later or break the lock from that device.',
             at: Date.now(),
@@ -352,6 +428,7 @@ export function createMockSyncController({ status, settings }: MockDeps): MockSy
     backupNow,
     checkRemote,
     connect,
+    cancelConnect: () => auth.cancelConnect(),
     signOut,
     resolveConflicts,
     dismissError: () => patch({ lastError: null }),
@@ -359,6 +436,8 @@ export function createMockSyncController({ status, settings }: MockDeps): MockSy
     dispose: () => {
       disposed = true
       pendingResolve?.([])
+      auth.cancelConnect()
+      unsubscribeAuth()
     },
   }
 }

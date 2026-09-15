@@ -2,6 +2,7 @@ import '@logseq/libs'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerCommands } from './logseq/commands'
+import { createHostGoogleAuth } from './logseq/googleHost'
 import { trackCurrentGraph } from './logseq/graph'
 import { isSupportedHostVersion } from './logseq/hostVersion'
 import { DEFAULT_SETTINGS, installSettings } from './logseq/settings'
@@ -35,15 +36,18 @@ async function main(): Promise<void> {
   const settings = createStore(DEFAULT_SETTINGS)
   installSettings(settings)
 
-  // M2: mock engine. M7 swaps in the real one behind the same `SyncController` interface.
-  const controller = createMockSyncController({ status, settings })
+  // M3: real Google auth. The sync flows are still the M2 mock; M7 swaps in the real engine behind the
+  // same `SyncController` interface and keeps `auth`.
+  const auth = createHostGoogleAuth(settings)
+  const controller = createMockSyncController({ status, settings, auth })
 
   registerToolbar(status)
   registerCommands(controller)
   trackCurrentGraph(status)
   void installThemeMode()
 
-  const hostVersion = await readHostVersion()
+  // `restore` never throws (it logs and reports signed-out); it must finish before "sync on startup" runs.
+  const [hostVersion] = await Promise.all([readHostVersion(), auth.restore()])
   createRoot(rootEl).render(
     <StrictMode>
       <App pluginId={pluginId} hostVersion={hostVersion} status={status} settings={settings} controller={controller} />

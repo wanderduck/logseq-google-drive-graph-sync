@@ -218,8 +218,10 @@ logseq.DB.onBlockChanged(uuid, (block, txData, txMeta) => {})
 
 ### 6.6 FileStorage [verified]
 - `logseq.FileStorage`: `setItem(key, string)`, `getItem`, `removeItem`, `hasItem`, `allKeys`, `clear`.
-- Backed by files in a host-managed per-plugin directory. The key may contain nested paths. No path traversal into the graph. No client-side size limit.
+- Backed by files in a host-managed per-plugin directory (`~/.logseq/storages/<plugin-id>/<key>`). The key may contain nested paths. No path traversal into the graph. No client-side size limit.
 - **Values are strings only.** Store state as JSON.
+- **`getItem` of a missing key rejects** (host `logseq.api.read_plugin_storage_file` → `read_rootdir_file` throws `"file not existed"`); call `hasItem` first. Verified in the 0.10.15 renderer bundle during M3.
+- **`removeItem` and `clear` are fire-and-forget** in SDK 0.0.17 (`caller.call`, not `callAsync`); only `setItem`/`getItem`/`hasItem`/`allKeys` round-trip. To "delete" reliably, overwrite the value with a sentinel (this plugin writes the JSON literal `null`).
 
 ### 6.7 Network [verified]
 - `logseq.Request._request({ url, method, headers, data, returnType: 'json'|'text'|'base64'|'arraybuffer', abortable, timeout })`:

@@ -46,9 +46,19 @@ export interface SyncError {
   at: number
 }
 
+/** A device-code sign-in in progress (plan M3 step 2); the panel shows the code while this is non-null. */
+export interface DeviceFlowInfo {
+  userCode: string
+  verificationUrl: string
+  /** Epoch ms; the code is useless after this. */
+  expiresAt: number
+}
+
 export interface SyncStatus {
   /** `null` = not connected to Google. */
   account: { email: string } | null
+  /** Non-null only while `account` is null and a sign-in waits for approval. */
+  deviceFlow: DeviceFlowInfo | null
   graph: { name: string; path: string } | null
   /** Non-null while a sync or backup runs. */
   running: SyncProgress | null
@@ -65,6 +75,7 @@ export interface SyncStatus {
 export function initialSyncStatus(): SyncStatus {
   return {
     account: null,
+    deviceFlow: null,
     graph: null,
     running: null,
     pendingConflicts: [],
