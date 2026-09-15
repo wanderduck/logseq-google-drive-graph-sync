@@ -38,12 +38,18 @@ export interface RemoteLock {
 export type RemoteStatus =
   | { kind: 'unchecked' }
   | { kind: 'checking' }
-  | { kind: 'ok'; checkedAt: number; pendingChanges: number; lock: RemoteLock | null }
+  /**
+   * `firstSync`: this graph was never synced from this device; `pendingChanges` is then the number of files
+   * the Drive mirror already holds (0 = no remote copy yet). Otherwise it counts remote changes since the last sync.
+   */
+  | { kind: 'ok'; checkedAt: number; pendingChanges: number; lock: RemoteLock | null; firstSync: boolean }
   | { kind: 'unavailable'; checkedAt: number; reason: string }
 
 export interface SyncError {
   message: string
   at: number
+  /** Set when the run was refused because of an EXPIRED lock of another device (plan §3.6 step 2): the panel offers to break it. */
+  expiredLock?: RemoteLock
 }
 
 /** A device-code sign-in in progress (plan M3 step 2); the panel shows the code while this is non-null. */
@@ -66,7 +72,10 @@ export interface SyncStatus {
   pendingConflicts: ConflictItem[]
   /** Set when the last run failed; cleared when the user dismisses it or a new run starts. */
   lastError: SyncError | null
+  /** The last run of this session (counts); `null` after a restart. */
   lastSync: SyncSummary | null
+  /** From the persisted state of the open graph (plan §3.5 `lastSyncAt`), so the panel knows it after a restart. */
+  lastSyncAt: number | null
   lastSnapshotAt: number | null
   lastProfileBackupAt: number | null
   remote: RemoteStatus
@@ -81,6 +90,7 @@ export function initialSyncStatus(): SyncStatus {
     pendingConflicts: [],
     lastError: null,
     lastSync: null,
+    lastSyncAt: null,
     lastSnapshotAt: null,
     lastProfileBackupAt: null,
     remote: { kind: 'unchecked' },

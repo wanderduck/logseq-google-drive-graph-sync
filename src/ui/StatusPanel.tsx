@@ -1,8 +1,7 @@
 import type { GdsyncSettings } from '../logseq/settings'
-import type { MockSyncController } from '../mock/mockSyncController'
+import type { SyncController } from '../sync/controller'
 import { deriveSyncState, type RemoteStatus, type SyncState, type SyncStatus } from '../sync/status'
 import { ConnectBox } from './ConnectBox'
-import { DemoControls } from './DemoControls'
 import { formatDateTime, formatRelativeTime, formatSummary } from './format'
 import { useNow } from './useNow'
 
@@ -11,7 +10,7 @@ export interface StatusPanelProps {
   hostVersion: string
   status: SyncStatus
   settings: GdsyncSettings
-  controller: MockSyncController
+  controller: SyncController
   onClose(): void
 }
 
@@ -33,9 +32,14 @@ function remoteText(remote: RemoteStatus, now: number): string {
       return `unavailable (${remote.reason}), checked ${formatRelativeTime(remote.checkedAt, now)}`
     case 'ok': {
       const n = remote.pendingChanges
-      const changes = n === 0 ? 'no remote changes' : `${n} remote change${n === 1 ? '' : 's'} to download`
       const lock = remote.lock ? `; locked by ${remote.lock.deviceName} until ${formatDateTime(remote.lock.expiresAt)}` : ''
-      return `${changes}${lock} (checked ${formatRelativeTime(remote.checkedAt, now)})`
+      const checked = `(checked ${formatRelativeTime(remote.checkedAt, now)})`
+      if (remote.firstSync) {
+        const files = n === 0 ? 'no remote copy yet; the first sync uploads this graph' : `${n} file${n === 1 ? '' : 's'} on Drive, not synced with this graph yet`
+        return `${files}${lock} ${checked}`
+      }
+      const changes = n === 0 ? 'no remote changes' : `${n} remote change${n === 1 ? '' : 's'} since the last sync`
+      return `${changes}${lock} ${checked}`
     }
   }
 }
@@ -56,6 +60,7 @@ export function StatusPanel({ pluginId, hostVersion, status, settings, controlle
   const state = deriveSyncState(status)
   const busy = status.running !== null
   const skipped = status.lastSync?.conflictsSkipped ?? 0
+  const lastSyncAt = status.lastSync?.finishedAt ?? status.lastSyncAt
 
   return (
     <section
@@ -113,6 +118,16 @@ export function StatusPanel({ pluginId, hostVersion, status, settings, controlle
           <div className="gdsync-banner__title">Failed {formatRelativeTime(status.lastError.at, now)}</div>
           <div>{status.lastError.message}</div>
           <div className="gdsync-banner__actions">
+            {status.lastError.expiredLock && (
+              <button
+                type="button"
+                className="gdsync-btn gdsync-btn--primary"
+                disabled={busy}
+                onClick={() => void controller.syncNow({ breakExpiredLock: true })}
+              >
+                Break the lock and sync
+              </button>
+            )}
             <button type="button" className="gdsync-btn gdsync-btn--ghost" onClick={() => controller.dismissError()}>
               Dismiss
             </button>
@@ -139,7 +154,7 @@ export function StatusPanel({ pluginId, hostVersion, status, settings, controlle
         </dd>
         <dt>Last sync</dt>
         <dd>
-          <When at={status.lastSync?.finishedAt ?? null} now={now} />
+          <When at={lastSyncAt} now={now} />
           {status.lastSync && <div className="gdsync-muted">{formatSummary(status.lastSync)}</div>}
         </dd>
         <dt>Last snapshot</dt>
@@ -191,10 +206,8 @@ export function StatusPanel({ pluginId, hostVersion, status, settings, controlle
         </button>
       </div>
 
-      <DemoControls controller={controller} busy={busy} />
-
       <footer className="gdsync-footer gdsync-muted">
-        <code>{pluginId}</code> · Logseq {hostVersion} · device “{settings.deviceName || 'unnamed'}” · Drive folder “
+        <code>{pluginId}</code> · Logseq {hostVersion} · device “{settings.deviceName || 'auto-named'}” · Drive folder “
         {settings.rootFolderName}”
       </footer>
     </section>

@@ -6,9 +6,9 @@ import { createHostGoogleAuth } from './logseq/googleHost'
 import { trackCurrentGraph } from './logseq/graph'
 import { isSupportedHostVersion } from './logseq/hostVersion'
 import { DEFAULT_SETTINGS, installSettings } from './logseq/settings'
+import { createSyncController } from './logseq/syncController'
 import { installThemeMode } from './logseq/theme'
 import { registerToolbar } from './logseq/toolbar'
-import { createMockSyncController } from './mock/mockSyncController'
 import { initialSyncStatus } from './sync/status'
 import { createStore } from './sync/store'
 import { App } from './ui/App'
@@ -36,18 +36,17 @@ async function main(): Promise<void> {
   const settings = createStore(DEFAULT_SETTINGS)
   installSettings(settings)
 
-  // M3: real Google auth. The sync flows are still the M2 mock; M7 swaps in the real engine behind the
-  // same `SyncController` interface and keeps `auth`.
+  const hostVersion = await readHostVersion()
   const auth = createHostGoogleAuth(settings)
-  const controller = createMockSyncController({ status, settings, auth })
+  const controller = createSyncController({ status, settings, auth, hostVersion })
 
   registerToolbar(status)
   registerCommands(controller)
-  trackCurrentGraph(status)
+  const graph = trackCurrentGraph(status)
   void installThemeMode()
 
   // `restore` never throws (it logs and reports signed-out); it must finish before "sync on startup" runs.
-  const [hostVersion] = await Promise.all([readHostVersion(), auth.restore()])
+  await auth.restore()
   createRoot(rootEl).render(
     <StrictMode>
       <App pluginId={pluginId} hostVersion={hostVersion} status={status} settings={settings} controller={controller} />
@@ -62,14 +61,18 @@ async function main(): Promise<void> {
     )
   }
 
-  // D9: off by default; when enabled it is the same manual action, just triggered at load time.
-  if (settings.get().syncOnStartup) void controller.syncNow()
-
   logseq.beforeunload(async () => {
-    controller.dispose()
+    graph.dispose()
+    await controller.dispose()
   })
 
   console.info(`[gdsync] ${pluginId} ready (host ${hostVersion})`)
+
+  // D9: off by default; when enabled it is the same manual action, just triggered at load time.
+  if (settings.get().syncOnStartup) {
+    await graph.ready
+    void controller.syncNow()
+  }
 }
 
 logseq.ready(main).catch((err: unknown) => console.error('[gdsync] startup failed', err))

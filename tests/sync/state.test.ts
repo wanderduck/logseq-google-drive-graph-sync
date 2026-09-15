@@ -29,6 +29,10 @@ describe('graphKey', () => {
     expect(graphKey('my graph')).not.toBe(graphKey('my_graph'))
     expect(graphKey('   ')).toMatch(/^graph-[0-9a-f]{8}$/)
     expect(graphKey('x'.repeat(100)).length).toBeLessThanOrEqual(48 + 9)
+    // M7: keyed by the graph PATH so two graphs with one name (the D11 device-2 simulation) keep separate state.
+    expect(graphKey('gdsync-dev', '/home/a/gdsync-dev')).not.toBe(graphKey('gdsync-dev', '/home/b/gdsync-dev'))
+    expect(graphKey('gdsync-dev', '/home/a/gdsync-dev')).toMatch(/^gdsync-dev-[0-9a-f]{8}$/)
+    expect(graphKey('gdsync-dev', 'gdsync-dev')).toBe(graphKey('gdsync-dev'))
     expect(shortHash('a')).toBe('e40c292c')
   })
 })

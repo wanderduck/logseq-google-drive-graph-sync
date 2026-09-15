@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createDriveClient } from '../../src/google/drive'
 import { FOLDER_MIME } from '../../src/google/driveQuery'
-import { bootstrapLayout, driveFolderName } from '../../src/google/layout'
+import { bootstrapLayout, driveFolderName, findLayout, resolveLayout, verifyLayout } from '../../src/google/layout'
 import { createFakeDrive } from './fakeDrive'
 
 describe('driveFolderName', () => {
@@ -48,5 +48,59 @@ describe('bootstrapLayout (plan M4 step 1, §3.3)', () => {
     expect(a.graphFolderId).not.toBe(b.graphFolderId)
     expect(fake.files.get(a.graphFolderId)!.name).toBe('work_notes')
     expect(fake.childrenOf(a.graphsId).map((f) => f.name).sort()).toEqual(['home', 'work_notes'])
+  })
+})
+
+describe('verifyLayout / resolveLayout / findLayout (M7: persisted ids)', () => {
+  const spec = { rootFolderName: 'Logseq Graph Sync', graphName: 'my graph' }
+
+  it('verifies persisted ids with files.get only and reuses them; a missing, trashed, renamed or moved folder fails the check', async () => {
+    const fake = createFakeDrive()
+    const layout = await bootstrapLayout(createDriveClient({ fetch: fake.fetch }), spec)
+    const known = { driveRootId: layout.rootId, graphFolderId: layout.graphFolderId }
+
+    const fresh = createDriveClient({ fetch: fake.fetch })
+    const before = fake.calls.length
+    expect(await verifyLayout(fresh, spec, known)).toBe(true)
+    const during = fake.calls.slice(before)
+    expect(during.every((c) => c.method === 'GET' && /\/files\/[^/?]+/.test(c.url.pathname))).toBe(true)
+    expect(during.length).toBe(3) // root, graph folder, and the `graphs` parent for the path
+    expect(await resolveLayout(fresh, spec, known)).toEqual({ ...known, reused: true })
+    expect(await findLayout(fresh, spec, known)).toEqual(known)
+
+    // Root renamed in settings.
+    expect(await verifyLayout(fresh, { ...spec, rootFolderName: 'Other' }, known)).toBe(false)
+    // Graph folder moved out of graphs/.
+    const other = fake.addFolder(layout.rootId, 'elsewhere')
+    fake.files.get(layout.graphFolderId)!.parents = [other.id]
+    expect(await verifyLayout(createDriveClient({ fetch: fake.fetch }), spec, known)).toBe(false)
+    fake.files.get(layout.graphFolderId)!.parents = [layout.graphsId]
+    // Trashed root.
+    fake.files.get(layout.rootId)!.trashed = true
+    expect(await verifyLayout(createDriveClient({ fetch: fake.fetch }), spec, known)).toBe(false)
+    fake.files.get(layout.rootId)!.trashed = false
+    // Deleted graph folder (404).
+    fake.files.delete(layout.graphFolderId)
+    expect(await verifyLayout(createDriveClient({ fetch: fake.fetch }), spec, known)).toBe(false)
+  })
+
+  it('resolveLayout bootstraps when the ids do not verify; findLayout finds without creating', async () => {
+    const fake = createFakeDrive()
+    const client = createDriveClient({ fetch: fake.fetch })
+    const folders = () => [...fake.files.values()].filter((f) => f.mimeType === FOLDER_MIME && f.id !== 'root').length
+
+    expect(await findLayout(client, spec, null)).toBeNull()
+    expect(await findLayout(client, spec, { driveRootId: 'nope', graphFolderId: 'nope' })).toBeNull()
+    expect(folders()).toBe(0)
+
+    const r = await resolveLayout(client, spec, { driveRootId: 'nope', graphFolderId: 'nope' })
+    expect(r.reused).toBe(false)
+    expect(folders()).toBe(6)
+    expect(fake.files.get(r.graphFolderId)!.name).toBe('my graph')
+
+    const found = await findLayout(createDriveClient({ fetch: fake.fetch }), spec, null)
+    expect(found).toEqual({ driveRootId: r.driveRootId, graphFolderId: r.graphFolderId })
+    expect(await findLayout(createDriveClient({ fetch: fake.fetch }), { ...spec, graphName: 'another' }, null)).toBeNull()
+    expect(folders()).toBe(6)
   })
 })

@@ -106,15 +106,20 @@ export function shortHash(text: string): string {
   return h.toString(16).padStart(8, '0')
 }
 
-/** `<sanitized graph name>-<hash>`, safe as a FileStorage file name on every OS. */
-export function graphKey(graphName: string): string {
+/**
+ * `<sanitized graph name>-<hash of the graph path>`, safe as a FileStorage file name on every OS. The base
+ * describes the files at one local PATH, so two graphs that share a name but not a directory (the D11
+ * device-2 simulation, or a graph moved and re-added) keep separate state; the Drive folder is named after
+ * the graph NAME (layout.ts), so they still meet in the same remote mirror. `path` defaults to the name.
+ */
+export function graphKey(graphName: string, graphPath: string = graphName): string {
   const cleaned = graphName
     .trim()
     .replace(/[^A-Za-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48)
     .replace(/-+$/g, '')
-  return `${cleaned === '' ? 'graph' : cleaned}-${shortHash(graphName)}`
+  return `${cleaned === '' ? 'graph' : cleaned}-${shortHash(graphPath)}`
 }
 
 export function freshState(key: string): SyncState {

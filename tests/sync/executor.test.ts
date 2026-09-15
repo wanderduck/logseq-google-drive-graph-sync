@@ -212,3 +212,41 @@ describe('executePlan: failures, breaker, abort, hooks, concurrency', () => {
     expect(w.driveFiles().size).toBe(10)
   })
 })
+
+describe('executePlan: beforeLocalWrite (M7, spike §4.2)', () => {
+  it('runs before downloads, local deletes and keep-both, ahead of the stat guard, and never before uploads', async () => {
+    const w = await createWorld()
+    const A = w.addDevice('A', { 'pages/a.md': 'A1', 'pages/b.md': 'B1', 'pages/c.md': 'C1', 'pages/d.md': 'D1' })
+    const rfA = await seedRemote(w, A, 'pages/a.md', 'A2')
+    const rfC = await seedRemote(w, A, 'pages/c.md', 'C2')
+    const calls: string[] = []
+    const stat = async (p: string) => {
+      const s = (await A.graph.fs.stat(p))!
+      return { size: s.size, mtimeMs: s.mtimeMs }
+    }
+    const ops: SyncOp[] = [
+      { kind: 'upload', path: 'pages/d.md', local: await localOf(A, 'pages/d.md'), existingId: null },
+      { kind: 'download', path: 'pages/a.md', remote: rfA, expectLocal: await stat('pages/a.md') },
+      { kind: 'delete-local', path: 'pages/b.md', expectLocal: await stat('pages/b.md') },
+      { kind: 'keep-both', path: 'pages/c.md', copyPath: 'pages/c.conflict.md', local: await localOf(A, 'pages/c.md'), remote: rfC },
+    ]
+    // The hook simulates the editor flush landing a pending edit on `pages/a.md`: the guard must then skip it.
+    const r = await executePlan(
+      depsFor(w, A, {
+        beforeLocalWrite: async (path) => {
+          calls.push(path)
+          if (path === 'pages/a.md') A.write('pages/a.md', 'A1 plus unsaved words')
+        },
+      }),
+      ops,
+    )
+    // keep-both flushes twice: before the copy and, after the copy's upload, before the download half.
+    expect(calls).toEqual(['pages/a.md', 'pages/b.md', 'pages/c.md', 'pages/c.md'])
+    expect(r.counts).toMatchObject({ uploaded: 2, downloaded: 1, deletedLocal: 1 })
+    expect(r.skipped.map((s) => s.op.path)).toEqual(['pages/a.md'])
+    expect(A.read('pages/a.md')).toBe('A1 plus unsaved words')
+    expect(A.has('pages/b.md')).toBe(false)
+    expect(A.read('pages/c.md')).toBe('C2')
+    expect(A.read('pages/c.conflict.md')).toBe('C1')
+  })
+})

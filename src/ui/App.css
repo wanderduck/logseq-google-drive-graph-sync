@@ -312,28 +312,6 @@ body,
   cursor: not-allowed;
 }
 
-.gdsync-demo {
-  margin-top: 12px;
-  padding: 8px 10px;
-  border: 1px dashed var(--gdsync-border);
-  border-radius: 8px;
-}
-
-.gdsync-demo summary {
-  cursor: pointer;
-  color: var(--gdsync-muted);
-  font-size: 12px;
-}
-
-.gdsync-demo__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin: 6px 0;
-  font-size: 12px;
-}
-
 .gdsync-footer {
   margin-top: 12px;
   font-size: 11.5px;

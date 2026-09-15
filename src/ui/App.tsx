@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { GdsyncSettings } from '../logseq/settings'
-import type { MockSyncController } from '../mock/mockSyncController'
+import type { SyncController } from '../sync/controller'
 import type { SyncStatus } from '../sync/status'
 import type { Store } from '../sync/store'
 import { ConflictDialog } from './ConflictDialog'
@@ -13,7 +13,7 @@ export interface AppProps {
   hostVersion: string
   status: Store<SyncStatus>
   settings: Store<GdsyncSettings>
-  controller: MockSyncController
+  controller: SyncController
 }
 
 function closePanel(): void {

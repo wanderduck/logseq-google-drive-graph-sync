@@ -46,6 +46,8 @@ export interface SyncRunHooks {
   onProgress?: (progress: SyncProgress) => void
   /** The conflict dialog (D7). Paths missing from the answer are skipped. Without a hook every conflict is skipped. */
   resolveConflicts?: (items: ConflictItem[]) => Promise<ConflictResolution[]>
+  /** See `ExecutorDeps.beforeLocalWrite` (the editor force-save of spike §4.2). */
+  beforeLocalWrite?: (path: string) => Promise<void>
   signal?: AbortSignal
 }
 
@@ -231,7 +233,17 @@ export async function runSync(deps: SyncEngineDeps, hooks: SyncRunHooks = {}): P
   }
 
   const exec = await executePlan(
-    { fs: deps.fs, remote: deps.remote, bak, deviceId: deps.deviceId, now, concurrency: deps.concurrency ?? DEFAULT_EXECUTE_CONCURRENCY, log, describeError: deps.describeError },
+    {
+      fs: deps.fs,
+      remote: deps.remote,
+      bak,
+      deviceId: deps.deviceId,
+      now,
+      concurrency: deps.concurrency ?? DEFAULT_EXECUTE_CONCURRENCY,
+      log,
+      describeError: deps.describeError,
+      beforeLocalWrite: hooks.beforeLocalWrite,
+    },
     ops,
     {
       signal: hooks.signal,

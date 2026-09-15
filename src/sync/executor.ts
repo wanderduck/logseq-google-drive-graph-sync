@@ -65,6 +65,12 @@ export interface ExecutorDeps {
   log?: (line: string) => void
   /** Turns a thrown error into the message kept in `failures`; the M7 wiring passes `describeGoogleError`. */
   describeError?: (err: unknown) => string
+  /**
+   * Awaited right before an op modifies the graph (download, delete-local, keep-both), ahead of the stat
+   * guard. The M7 wiring force-saves the block being edited and waits for the flush (spike §4.2), so an edit
+   * in progress lands on disk first and the guard then skips the file instead of overwriting it.
+   */
+  beforeLocalWrite?: (path: string) => Promise<void>
 }
 
 export interface ExecuteHooks {
@@ -117,6 +123,7 @@ export async function executePlan(deps: ExecutorDeps, ops: readonly SyncOp[], ho
   const concurrency = deps.concurrency ?? DEFAULT_EXECUTE_CONCURRENCY
   const signal = hooks.signal
   const transfer = { signal }
+  const beforeLocalWrite = deps.beforeLocalWrite ?? (async () => undefined)
 
   async function upload(path: string, existingId: string | null, stashRemote: RemoteFile | null = null): Promise<Guarded<Completion>> {
     const stat = await fs.stat(path)
@@ -151,6 +158,7 @@ export async function executePlan(deps: ExecutorDeps, ops: readonly SyncOp[], ho
     if (file.sha256 !== null && sha256 !== file.sha256) {
       throw new Error(`${path} changed on Google Drive during the sync (content hash mismatch); it is planned again next run`)
     }
+    await beforeLocalWrite(path)
     const current = await fs.stat(path)
     if (expectLocal) {
       if (!statMatches(current, expectLocal)) return { ok: false, reason: 'changed locally during the sync' }
@@ -180,6 +188,7 @@ export async function executePlan(deps: ExecutorDeps, ops: readonly SyncOp[], ho
         return r.ok ? { kind: 'done', completions: [r.value] } : { kind: 'skipped', reason: r.reason, completions: [] }
       }
       case 'delete-local': {
+        await beforeLocalWrite(op.path)
         const current = await fs.stat(op.path)
         if (current === null) return { kind: 'done', completions: [{ path: op.path, entry: null, remote: null }] } // already gone
         if (!statMatches(current, op.expectLocal)) return { kind: 'skipped', reason: 'changed locally during the sync', completions: [] }
@@ -210,6 +219,7 @@ export async function executePlan(deps: ExecutorDeps, ops: readonly SyncOp[], ho
         return { kind: 'done', completions: [{ path: op.path, entry: null, remote: null }] }
       case 'keep-both': {
         const expect: LocalStat = { size: op.local.size, mtimeMs: op.local.mtimeMs }
+        await beforeLocalWrite(op.path)
         if (!statMatches(await fs.stat(op.path), expect)) return { kind: 'skipped', reason: 'changed locally during the sync', completions: [] }
         await fs.copyFile(op.path, op.copyPath)
         const completions: Completion[] = []
