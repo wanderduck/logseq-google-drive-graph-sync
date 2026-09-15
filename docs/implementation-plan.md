@@ -68,7 +68,7 @@ spikes/               M0 only; deleted at end of M0
 ```
 
 ### 3.4 Sync scope
-- **Graph folder:** everything except `logseq/bak/`, `logseq/.recycle/`, `logseq/version-files/`, `.git/`, `.DS_Store`, `Thumbs.db`, `*.swp`, `*~`.
+- **Graph folder:** everything except `logseq/bak/`, `logseq/.recycle/`, `logseq/version-files/`, `.git/`, `.DS_Store`, `Thumbs.db`, `*.swp`, `*~`. **Amendment approved 2026-09-15:** also `logseq/graphs-txid.edn` (per-device Logseq Sync state) and `logseq/pages-metadata.edn` (legacy cache), which Logseq itself never indexes, and the plugin's own `*.gdsync-tmp` files.
 - **Profile bundle (`~/.logseq/`):**
   - Included: `config/` (`config.edn`, `plugins.edn`), `preferences.json`, `plugins/`, `settings/*.json` (C1: on by default, with a warning).
   - Excluded: `graphs/` (caches), **this plugin's own** settings file, and its FileStorage directory (tokens).

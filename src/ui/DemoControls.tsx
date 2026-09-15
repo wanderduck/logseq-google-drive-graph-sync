@@ -45,6 +45,17 @@ export function DemoControls({ controller, busy }: DemoControlsProps) {
         Talks to the real Google Drive: creates a throwaway “&lt;root folder&gt; smoke-…” folder, exercises uploads, downloads, changes and the lock, then
         deletes it again. Needs a connected account and a graph under ~/logseq-test-graphs/. Progress is logged as [gdsync] smoke in the console.
       </p>
+      <div className="gdsync-demo__row">
+        <span>M5 local file layer:</span>
+        <button type="button" className="gdsync-btn gdsync-btn--small" disabled={busy} onClick={() => void controller.runFsSmoke()}>
+          Run file smoke test
+        </button>
+      </div>
+      <p className="gdsync-muted gdsync-small">
+        Writes to the open graph through the host bridge: scans it, creates and overwrites pages/gdsync-smoke.md atomically, round-trips a 300 KB asset,
+        renames, and moves everything it made into logseq/bak/gdsync/smoke-…/. Reads ~/.logseq read-only. Refuses unless the graph is under
+        ~/logseq-test-graphs/. Progress is logged as [gdsync] fs smoke in the console.
+      </p>
     </details>
   )
 }

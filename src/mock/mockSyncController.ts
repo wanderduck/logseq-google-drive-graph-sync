@@ -17,6 +17,7 @@ import type { SyncProgress, SyncState, SyncStatus, SyncStep, SyncSummary } from 
 import type { Store } from '../sync/store'
 import { formatSummary } from '../ui/format'
 import { runDriveSmoke as runDriveSmokeScript } from './driveSmoke'
+import { runFsSmoke as runFsSmokeScript } from './fsSmoke'
 
 const CONNECT_TOAST_KEY = 'gdsync-connect'
 
@@ -29,6 +30,8 @@ export interface MockSyncController extends SyncController {
   showState(state: SyncState): void
   /** M4 DoD: the scripted Drive-layer check against the real Google Drive (src/mock/driveSmoke.ts). */
   runDriveSmoke(): Promise<void>
+  /** M5 DoD: the scripted file-layer check on the test graph (src/mock/fsSmoke.ts). Needs no Google account. */
+  runFsSmoke(): Promise<void>
 }
 
 export interface MockDeps {
@@ -411,6 +414,43 @@ export function createMockSyncController({ status, settings, auth }: MockDeps): 
     }
   }
 
+  async function runFsSmoke(): Promise<void> {
+    if (status.get().running) {
+      showToast('A sync or backup is already running.', 'info', 3000)
+      return
+    }
+    patch({ lastError: null, running: { step: 'preflight', label: 'File smoke test: starting…', done: 0, total: 0 } })
+    const toast = await openProgressToast('File smoke test: starting…')
+    const log = (line: string, detail?: unknown): void => {
+      if (detail === undefined) console.info(`[gdsync] ${line}`)
+      else console.warn(`[gdsync] ${line}`, detail)
+    }
+    try {
+      const report = await runFsSmokeScript({
+        graph: status.get().graph,
+        log,
+        onStep: (label, index, total) => {
+          progress({ step: 'scan', label: `File smoke test: ${label}`, done: index - 1, total })
+          void toast.update(`File smoke test (${index}/${total}): ${label}`)
+        },
+      })
+      if (disposed) return
+      toast.close()
+      const bak = report.bakDir ? ` Its files were moved to ${report.bakDir}/ (ignored by Logseq; delete it whenever).` : ''
+      if (report.failedStep === null) {
+        patch({ running: null })
+        showToast(`File smoke test passed: ${report.passed}/${report.total} steps in ${(report.durationMs / 1000).toFixed(1)} s.${bak}`, 'success', 15_000)
+        return
+      }
+      const message = `File smoke test failed at "${report.failedStep}" (${report.passed}/${report.total} passed): ${report.error}.${bak}`
+      patch({ running: null, lastError: { message, at: Date.now() } })
+      showToast(message, 'error', 20_000)
+    } catch (err) {
+      toast.close()
+      fail('File smoke test', err)
+    }
+  }
+
   function resolveConflicts(resolutions: ConflictResolution[]): void {
     if (pendingResolve) {
       pendingResolve(resolutions)
@@ -473,6 +513,7 @@ export function createMockSyncController({ status, settings, auth }: MockDeps): 
     dismissError: () => patch({ lastError: null }),
     showState,
     runDriveSmoke,
+    runFsSmoke,
     dispose: () => {
       disposed = true
       pendingResolve?.([])
